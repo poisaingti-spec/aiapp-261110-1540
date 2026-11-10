@@ -447,6 +447,11 @@ And build a COMPLETE, WORKING Android app in Kotlin + Jetpack Compose (Material 
     @Deprecated("Use inspectApk instead")
     fun inspecting(apkFile: File): ReaApkSummary = inspectApk(apkFile)
 
+    /**
+     * Convenience function used by UI to import an APK and get the summary.
+     */
+    fun importApk(apkFile: File): ReaApkSummary = inspectApk(apkFile)
+
     private fun inspectApkSignature(apkFile: File): ApkSignatureReport {
         // Compute SHA-256 of the entire APK file
         val sha256Digest = MessageDigest.getInstance("SHA-256").digest(apkFile.readBytes()).joinToString("") { "%02x".format(it) }
@@ -531,58 +536,55 @@ And build a COMPLETE, WORKING Android app in Kotlin + Jetpack Compose (Material 
             for (entry in zip.entries()) {
                 if (entry.isDirectory) continue
                 val name = entry.name
-                val bytes = zip.getInputStream(entry).use { it.readBytes() }
+                val isDrawable = name.startsWith("res/drawable") || name.startsWith("res/mipmap")
+                val isFont = name.startsWith("res/font/")
+                val isRaw = name.startsWith("res/raw/")
+                val isAsset = name.startsWith("assets/")
+                if (!(isDrawable || isFont || isRaw || isAsset)) continue
+
+                // Filter out unwanted drawables (9-patch, system icons, etc.)
+                if (isDrawable) {
+                    val fileName = name.substringAfterLast('/')
+                    if (fileName.endsWith(".9.png", true) ||
+                        fileName.startsWith("abc_") ||
+                        fileName.startsWith("notification_") ||
+                        fileName.startsWith("mtrl_") ||
+                        fileName.startsWith("design_")
+                    ) continue
+                    if (!(fileName.endsWith(".png", true) || fileName.endsWith(".jpg", true) || fileName.endsWith(".webp", true))) continue
+                }
+
+                val bytes = runCatching { zip.getInputStream(entry).use { it.readBytes() } }.getOrNull() ?: continue
+                if (bytes.size > 15 * 1024 * 1024) continue // skip files > 15 MB
 
                 // Determine target path in the new project
-                var targetPath: String? = null
-                var resourceRef: String? = null
-
-                when {
-                    name.startsWith("res/drawable") || name.startsWith("res/mipmap") -> {
-                        if (name.endsWith(".png", true) || name.endsWith(".jpg", true) || name.endsWith(".webp", true) || name.endsWith(".xml")) {
-                            val fileName = name.substringAfterLast('/')
-                            targetPath = "app/src/main/res/drawable/$fileName"
-                            resourceRef = "R.drawable.${fileName.substringBeforeLast('.')}"
-                        }
-                    }
-                    name.startsWith("res/raw/") -> {
-                        val fileName = name.substringAfterLast('/')
-                        targetPath = "app/src/main/res/raw/$fileName"
-                        resourceRef = "R.raw.${fileName.substringBeforeLast('.')}"
-                    }
-                    name.startsWith("res/font/") -> {
-                        val fileName = name.substringAfterLast('/')
-                        targetPath = "app/src/main/res/font/$fileName"
-                        resourceRef = "R.font.${fileName.substringBeforeLast('.')}"
-                    }
-                    name.startsWith("assets/") -> {
-                        val assetPath = name.removePrefix("assets/")
-                        targetPath = "app/src/main/assets/$assetPath"
-                        resourceRef = "assets/$assetPath"
-                    }
+                val targetPath: String
+                if (isDrawable) {
+                    targetPath = "app/src/main/res/drawable/${name.substringAfterLast('/')}"
+                } else if (isFont) {
+                    targetPath = "app/src/main/res/font/${name.substringAfterLast('/')}"
+                } else if (isRaw) {
+                    targetPath = "app/src/main/res/raw/${name.substringAfterLast('/')}"
+                } else {
+                    targetPath = "app/src/main/assets/${name.removePrefix("assets/")}"
                 }
 
-                if (targetPath != null) {
-                    files[targetPath] = bytes
-                    if (resourceRef != null) {
-                        summaryLines.add("- $resourceRef")
-                    }
+                files[targetPath] = bytes
+
+                // Build summary for the prompt
+                val ref = when {
+                    isDrawable -> "R.drawable.${name.substringAfterLast('/').substringBeforeLast('.')}"
+                    isFont -> "R.font.${name.substringAfterLast('/').substringBeforeLast('.')}"
+                    isRaw -> "R.raw.${name.substringAfterLast('/').substringBeforeLast('.')}"
+                    else -> "assets/${name.removePrefix("assets/")}"
                 }
+                summaryLines.add("- ${name.substringAfterLast('/')} -> $ref")
             }
         }
 
-        val summary = if (summaryLines.isEmpty()) {
-            "No reusable resources found in the APK."
-        } else {
-            "Extracted reusable resources:\n${summaryLines.joinToString("\n")}"
-        }
+        val promptSummary = if (summaryLines.isEmpty()) "" else
+            "Extracted reusable resources from the original APK:\n" + summaryLines.joinToString("\n")
 
-        return ExtractedResourcesBundle(files.toMap(), summary)
+        return ExtractedResourcesBundle(files.toMap(), promptSummary)
     }
-
-    /**
-     * Alias for extractReusableResources to satisfy older callers.
-     */
-    @Deprecated("Use extractReusableResources instead")
-    fun importApk(apkFile: File): ExtractedResourcesBundle = extractReusableResources(apkFile)
 }
