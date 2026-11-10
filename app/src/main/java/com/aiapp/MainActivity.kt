@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aiapp.builder.BuildResult
 import com.aiapp.ui.AppTheme
 import com.aiapp.ui.BuildScreen
 import com.aiapp.ui.BuildViewModel
@@ -110,15 +111,19 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = { screen = "settings" },
                             )
                             "build" -> BuildScreen(
-                                vm,
-                                buildVm,
-                                null, // apkFile
+                                buildVm = buildVm,
+                                apkFile = "",
+                                onResult = { result: BuildResult ->
+                                    if (result.success && result.apkUrl != null) {
+                                        // Build succeeded; BuildScreen will handle install prompt
+                                    }
+                                },
                                 onBack = { screen = "chat" },
                             )
                             "settings" -> SettingsScreen(
                                 vm,
                                 onBack = { screen = "chat" },
-                                onOpenCodespace = { url -> navigateToCodespace(url) },
+                                onOpenCodespace = { navigateToCodespace(null) },
                             )
                             else -> ChatScreen(
                                 vm,
