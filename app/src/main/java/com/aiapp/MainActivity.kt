@@ -111,13 +111,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = { screen = "settings" },
                             )
                             "build" -> BuildScreen(
-                                buildVm = buildVm,
-                                apkFile = "",
-                                onResult = { result: BuildResult ->
-                                    if (result.success && result.apkUrl != null) {
-                                        // Build succeeded; BuildScreen will handle install prompt
-                                    }
-                                },
+                                vm = buildVm,
                                 onBack = { screen = "chat" },
                             )
                             "settings" -> SettingsScreen(
