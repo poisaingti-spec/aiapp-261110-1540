@@ -535,56 +535,41 @@ And build a COMPLETE, WORKING Android app in Kotlin + Jetpack Compose (Material 
         ZipFile(apkFile).use { zip ->
             for (entry in zip.entries()) {
                 if (entry.isDirectory) continue
-                val name = entry.name
-                val isDrawable = name.startsWith("res/drawable") || name.startsWith("res/mipmap")
-                val isFont = name.startsWith("res/font/")
-                val isRaw = name.startsWith("res/raw/")
-                val isAsset = name.startsWith("assets/")
-                if (!(isDrawable || isFont || isRaw || isAsset)) continue
-
-                // Filter out unwanted drawables (9-patch, system icons, etc.)
-                if (isDrawable) {
-                    val fileName = name.substringAfterLast('/')
-                    if (fileName.endsWith(".9.png", true) ||
-                        fileName.startsWith("abc_") ||
-                        fileName.startsWith("notification_") ||
-                        fileName.startsWith("mtrl_") ||
-                        fileName.startsWith("design_")
-                    ) continue
-                    if (!(fileName.endsWith(".png", true) || fileName.endsWith(".jpg", true) || fileName.endsWith(".webp", true))) continue
+                val n = entry.name
+                val lower = n.lowercase()
+                val isDrawable = n.startsWith("res/drawable") || n.startsWith("res/mipmap")
+                val isFont = n.startsWith("res/font/")
+                val isRaw = n.startsWith("res/raw/")
+                val isAsset = n.startsWith("assets/")
+                val allowed = when {
+                    isDrawable && (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")) -> true
+                    isFont && (lower.endsWith(".ttf") || lower.endsWith(".otf")) -> true
+                    isRaw -> true
+                    isAsset -> true
+                    else -> false
                 }
+                if (!allowed) continue
 
                 val bytes = runCatching { zip.getInputStream(entry).use { it.readBytes() } }.getOrNull() ?: continue
-                if (bytes.size > 15 * 1024 * 1024) continue // skip files > 15 MB
-
-                // Determine target path in the new project
-                val targetPath: String
-                if (isDrawable) {
-                    targetPath = "app/src/main/res/drawable/${name.substringAfterLast('/')}"
-                } else if (isFont) {
-                    targetPath = "app/src/main/res/font/${name.substringAfterLast('/')}"
-                } else if (isRaw) {
-                    targetPath = "app/src/main/res/raw/${name.substringAfterLast('/')}"
-                } else {
-                    targetPath = "app/src/main/assets/${name.removePrefix("assets/")}"
+                val projectPath = when {
+                    isDrawable -> "app/src/main/$n"
+                    isFont -> "app/src/main/$n"
+                    isRaw -> "app/src/main/$n"
+                    isAsset -> "app/src/main/$n"
+                    else -> continue
                 }
-
-                files[targetPath] = bytes
-
-                // Build summary for the prompt
+                files[projectPath] = bytes
                 val ref = when {
-                    isDrawable -> "R.drawable.${name.substringAfterLast('/').substringBeforeLast('.')}"
-                    isFont -> "R.font.${name.substringAfterLast('/').substringBeforeLast('.')}"
-                    isRaw -> "R.raw.${name.substringAfterLast('/').substringBeforeLast('.')}"
-                    else -> "assets/${name.removePrefix("assets/")}"
+                    projectPath.contains("/res/drawable/") -> "R.drawable.${projectPath.substringAfterLast('/').substringBeforeLast('.')}"
+                    projectPath.contains("/res/font/") -> "R.font.${projectPath.substringAfterLast('/').substringBeforeLast('.')}"
+                    projectPath.contains("/res/raw/") -> "R.raw.${projectPath.substringAfterLast('/').substringBeforeLast('.')}"
+                    else -> "assets/${projectPath.substringAfterLast('/')}"
                 }
-                summaryLines.add("- ${name.substringAfterLast('/')} -> $ref")
+                summaryLines.add("- $ref (from $n)")
             }
         }
 
-        val promptSummary = if (summaryLines.isEmpty()) "" else
-            "Extracted reusable resources from the original APK:\n" + summaryLines.joinToString("\n")
-
+        val promptSummary = if (summaryLines.isEmpty()) "No reusable resources found." else "Reusable resources extracted:\n${summaryLines.joinToString("\n")}"
         return ExtractedResourcesBundle(files.toMap(), promptSummary)
     }
 }
