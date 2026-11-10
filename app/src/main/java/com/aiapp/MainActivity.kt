@@ -106,20 +106,17 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = "chat" }
                             )
                             "create" -> CreateScreen(
-                                createVm = createVm,
+                                vm = createVm,
                                 onBack = { screen = "chat" },
                                 onOpenSettings = { screen = "settings" }
                             )
                             "rea" -> ReaScreen(
-                                reaVm = reaVm,
+                                vm = reaVm,
                                 onBack = { screen = "chat" }
                             )
                             "build" -> BuildScreen(
-                                buildVm = buildVm,
-                                onResult = { result: BuildResult ->
-                                    // BuildResult handled via BuildRunner timeline
-                                },
-                                apkFile = buildVm.apkFile ?: File(""),
+                                vm = buildVm,
+                                chat = vm,
                                 onBack = { screen = "chat" }
                             )
                             "settings" -> SettingsScreen(
