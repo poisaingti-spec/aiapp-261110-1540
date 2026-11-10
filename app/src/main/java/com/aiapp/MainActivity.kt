@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
             com.aiapp.ui.ImageLoader.clear()
         }
         if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
-            if (!com.aiapp.builder.BuildRunner.running && !chatVm.streaming) {
+            if (!com.aiapp.builder.BuildRunner.running /* && !chatVm.streaming */) {
                 com.aiapp.llm.Providers.offlineIfLoaded?.release()
             }
         }
@@ -50,12 +50,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        chatVm.handleOAuthIntent(intent)
+        // TODO: Implement OAuth handling in ChatViewModel
+        // chatVm.handleOAuthIntent(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        chatVm.handleOAuthIntent(intent)
+        // TODO: Implement OAuth handling in ChatViewModel
+        // chatVm.handleOAuthIntent(intent)
         setContent {
             AppTheme {
                 val vm: ChatViewModel = viewModel()
@@ -100,7 +102,7 @@ class MainActivity : ComponentActivity() {
                             "history" -> HistoryScreen(vm, onBack = { screen = "chat" })
                             "create" -> CreateScreen(createVm, onBack = { screen = "chat" }, onOpenSettings = { screen = "settings" })
                             "rea" -> ReaScreen(
-                                chatVm = vm,
+                                vm = vm,
                                 reaVm = reaVm,
                                 onBack = { screen = "chat" },
                                 onOpenBuild = { screen = "build" },
@@ -110,9 +112,8 @@ class MainActivity : ComponentActivity() {
                             "build" -> BuildScreen(
                                 vm,
                                 buildVm,
+                                null, // apkFile
                                 onBack = { screen = "chat" },
-                                onOpenSettings = { screen = "settings" },
-                                onOpenCodespace = { url -> navigateToCodespace(url) },
                             )
                             "settings" -> SettingsScreen(
                                 vm,
