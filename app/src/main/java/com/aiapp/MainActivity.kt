@@ -32,6 +32,7 @@ import com.aiapp.ui.HistoryScreen
 import com.aiapp.ui.ReaScreen
 import com.aiapp.ui.ReaViewModel
 import com.aiapp.ui.SettingsScreen
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val chatVm: ChatViewModel by viewModels()
@@ -100,33 +101,40 @@ class MainActivity : ComponentActivity() {
                         },
                     ) {
                         when (screen) {
-                            "history" -> HistoryScreen(vm, onBack = { screen = "chat" })
-                            "create" -> CreateScreen(createVm, onBack = { screen = "chat" }, onOpenSettings = { screen = "settings" })
-                            "rea" -> ReaScreen(
+                            "history" -> HistoryScreen(
                                 vm = vm,
-                                reaVm = reaVm,
+                                onBack = { screen = "chat" }
+                            )
+                            "create" -> CreateScreen(
+                                createVm = createVm,
                                 onBack = { screen = "chat" },
-                                onOpenBuild = { screen = "build" },
-                                onOpenCodespace = { url -> navigateToCodespace(url) },
-                                onOpenSettings = { screen = "settings" },
+                                onOpenSettings = { screen = "settings" }
+                            )
+                            "rea" -> ReaScreen(
+                                reaVm = reaVm,
+                                onBack = { screen = "chat" }
                             )
                             "build" -> BuildScreen(
-                                vm = buildVm,
-                                onBack = { screen = "chat" },
+                                buildVm = buildVm,
+                                onResult = { result: BuildResult ->
+                                    // BuildResult handled via BuildRunner timeline
+                                },
+                                apkFile = buildVm.apkFile ?: File(""),
+                                onBack = { screen = "chat" }
                             )
                             "settings" -> SettingsScreen(
-                                vm,
+                                vm = vm,
                                 onBack = { screen = "chat" },
-                                onOpenCodespace = { navigateToCodespace(null) },
+                                onOpenCodespace = { navigateToCodespace(null) }
                             )
                             else -> ChatScreen(
-                                vm,
+                                chat = vm,
                                 onOpenSettings = { screen = "settings" },
                                 onOpenBuild = { screen = "build" },
                                 onOpenRea = { screen = "rea" },
                                 onOpenCodespace = { navigateToCodespace(null) },
                                 onOpenHistory = { screen = "history" },
-                                onOpenCreate = { screen = "create" },
+                                onOpenCreate = { screen = "create" }
                             )
                         }
                     }
@@ -143,14 +151,14 @@ class MainActivity : ComponentActivity() {
                             CodespaceScreen(
                                 vm = vm,
                                 initialUrl = CodespaceSessionManager.URL_GITHUB_CODESPACES,
-                                requestedUrl = requestedCodespaceUrl,
+                                url = requestedCodespaceUrl,
                                 onConsumeRequestedUrl = { requestedCodespaceUrl = null },
                                 isVisible = screen == "codespace",
                                 onBack = {
                                     screen = if (previousScreen != "codespace") previousScreen else "chat"
                                 },
                                 onSwitchToChat = { screen = "chat" },
-                                onSwitchToBuild = { screen = "build" },
+                                onSwitchToBuild = { screen = "build" }
                             )
                         }
                     }
