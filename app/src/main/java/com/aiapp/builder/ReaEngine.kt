@@ -9,6 +9,13 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.zip.ZipFile
 import java.util.zip.ZipEntry
+import kotlin.collections.linkedMapOf
+import kotlin.collections.linkedSetOf
+import kotlin.collections.mutableListOf
+import kotlin.collections.mutableMapOf
+import kotlin.collections.mutableSetOf
+import kotlin.io.path.nameWithoutExtension
+import kotlin.text.buildString
 
 /**
  * Android Native Port of `github.com/morluto/rea` (Reverse Engineer Anything).
@@ -434,6 +441,12 @@ And build a COMPLETE, WORKING Android app in Kotlin + Jetpack Compose (Material 
         )
     }
 
+    /**
+     * Alias for inspectApk to satisfy older callers.
+     */
+    @Deprecated("Use inspectApk instead")
+    fun inspecting(apkFile: File): ReaApkSummary = inspectApk(apkFile)
+
     private fun inspectApkSignature(apkFile: File): ApkSignatureReport {
         // Compute SHA-256 of the entire APK file
         val sha256Digest = MessageDigest.getInstance("SHA-256").digest(apkFile.readBytes()).joinToString("") { "%02x".format(it) }
@@ -467,13 +480,8 @@ And build a COMPLETE, WORKING Android app in Kotlin + Jetpack Compose (Material 
             }
 
             // Check for APK Signing Block (V2/V3) in ZIP Central Directory tail
-            // This is a simplified detection; a full implementation would parse the ZIP tail.
-            // We'll just look for the magic bytes in the file.
             val fileBytes = apkFile.readBytes()
             val tail = fileBytes.takeLast(1024 * 1024) // last 1MB
-            val v2Magic = ByteBuffer.wrap("APK Sig Block 42".toByteArray()).order(ByteOrder.LITTLE_ENDIAN).getLong()
-            // Actually, the magic is 0x7109871a for V2, 0xf05368c0 for V3, 0x1b93ad61 for V3.1
-            // We'll do a simple byte search for the known block IDs.
             val v2Id = 0x7109871a.toLong()
             val v3Id = 0xf05368c0.toLong()
             val v31Id = 0x1b93ad61.toLong()
@@ -523,39 +531,58 @@ And build a COMPLETE, WORKING Android app in Kotlin + Jetpack Compose (Material 
             for (entry in zip.entries()) {
                 if (entry.isDirectory) continue
                 val name = entry.name
+                val bytes = zip.getInputStream(entry).use { it.readBytes() }
+
+                // Determine target path in the new project
                 var targetPath: String? = null
-                var ref: String? = null
+                var resourceRef: String? = null
+
                 when {
-                    name.startsWith("res/drawable") && (name.endsWith(".png", true) || name.endsWith(".jpg", true) || name.endsWith(".webp", true)) && !name.endsWith(".9.png", true) -> {
-                        targetPath = "app/src/main/$name"
-                        ref = "R.drawable.${name.substringAfterLast('/').substringBeforeLast('.')}"
-                    }
-                    name.startsWith("res/font") && (name.endsWith(".ttf", true) || name.endsWith(".otf", true)) -> {
-                        targetPath = "app/src/main/$name"
-                        ref = "R.font.${name.substringAfterLast('/').substringBeforeLast('.')}"
+                    name.startsWith("res/drawable") || name.startsWith("res/mipmap") -> {
+                        if (name.endsWith(".png", true) || name.endsWith(".jpg", true) || name.endsWith(".webp", true) || name.endsWith(".xml")) {
+                            val fileName = name.substringAfterLast('/')
+                            targetPath = "app/src/main/res/drawable/$fileName"
+                            resourceRef = "R.drawable.${fileName.substringBeforeLast('.')}"
+                        }
                     }
                     name.startsWith("res/raw/") -> {
-                        targetPath = "app/src/main/$name"
-                        ref = "R.raw.${name.substringAfterLast('/').substringBeforeLast('.')}"
+                        val fileName = name.substringAfterLast('/')
+                        targetPath = "app/src/main/res/raw/$fileName"
+                        resourceRef = "R.raw.${fileName.substringBeforeLast('.')}"
+                    }
+                    name.startsWith("res/font/") -> {
+                        val fileName = name.substringAfterLast('/')
+                        targetPath = "app/src/main/res/font/$fileName"
+                        resourceRef = "R.font.${fileName.substringBeforeLast('.')}"
                     }
                     name.startsWith("assets/") -> {
-                        targetPath = "app/src/main/$name"
-                        ref = "assets/${name.removePrefix("assets/")}"
+                        val assetPath = name.removePrefix("assets/")
+                        targetPath = "app/src/main/assets/$assetPath"
+                        resourceRef = "assets/$assetPath"
                     }
                 }
+
                 if (targetPath != null) {
-                    val bytes = runCatching { zip.getInputStream(entry).use { it.readBytes() } }.getOrNull()
-                    if (bytes != null && bytes.size <= 15 * 1024 * 1024) { // 15 MB limit
-                        files[targetPath] = bytes
-                        if (ref != null) summaryLines.add("The user's file $name is in the project as $ref; use it where it fits.")
+                    files[targetPath] = bytes
+                    if (resourceRef != null) {
+                        summaryLines.add("- $resourceRef")
                     }
                 }
             }
         }
 
-        return ExtractedResourcesBundle(
-            files = files,
-            promptSummary = if (summaryLines.isEmpty()) "" else "\n\nFiles from the user:\n" + summaryLines.joinToString("\n") { "- $it" }
-        )
+        val summary = if (summaryLines.isEmpty()) {
+            "No reusable resources found in the APK."
+        } else {
+            "Extracted reusable resources:\n${summaryLines.joinToString("\n")}"
+        }
+
+        return ExtractedResourcesBundle(files.toMap(), summary)
     }
+
+    /**
+     * Alias for extractReusableResources to satisfy older callers.
+     */
+    @Deprecated("Use extractReusableResources instead")
+    fun importApk(apkFile: File): ExtractedResourcesBundle = extractReusableResources(apkFile)
 }
